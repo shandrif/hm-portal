@@ -78,6 +78,8 @@ body.ready .app,body.ready .widget{animation:none}
 .icon{position:relative;width:64px;height:64px;border-radius:22.5%;display:grid;place-items:center;font-size:32px;
   box-shadow:inset 0 1px 1px rgba(255,255,255,.45),inset 0 -2px 4px rgba(0,0,0,.08),0 4px 14px rgba(0,0,0,.22);
   transition:transform 220ms var(--ease-out),filter 220ms}
+.icon.img{background:transparent!important;overflow:hidden}
+.icon.img img{width:100%;height:100%;display:block;border-radius:inherit;object-fit:cover;pointer-events:none}
 .icon::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(180deg,rgba(255,255,255,.35),rgba(255,255,255,0) 50%);pointer-events:none}
 @media (min-width:600px){.icon{width:72px;height:72px;font-size:36px}}
 .app:active .icon{transform:scale(.9);filter:brightness(.85)}
@@ -240,7 +242,7 @@ body.edit .app .icon{animation:jiggle .26s ease-in-out infinite alternate;animat
       <label class="field"><span>About</span><input id="eDesc" placeholder="Short description"></label>
     </div>
     <div class="grp">
-      <label class="field"><span>Icon</span><input id="eIcon" maxlength="8" placeholder="One emoji"></label>
+      <label class="field"><span>Icon</span><input id="eIcon" placeholder="Emoji or image link"></label>
       <div class="swatches" id="swatches" role="group" aria-label="Icon colour"></div>
     </div>
     <div class="grp">
@@ -275,10 +277,11 @@ let apps=[],cred=null,editingId=null,deletingId=null,status={},pickedColor=null;
 
 const store={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch{return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}};
 function dockIds(){let d=store.get("hmDock",null);if(!d)d=[];return d.filter(id=>apps.some(a=>a.id===id)).slice(0,4)}
+const isImg=v=>/^(https?:\/\/|icons\/).+\.(svg|png|jpe?g|webp)(\?.*)?$/i.test(v||"");
 const emo=a=>String(a.icon||"").split("|")[0]||"🔗";const cidx=a=>{const n=parseInt(String(a.icon||"").split("|")[1]);return isNaN(n)?null:n};
 function colorFor(a){const c=cidx(a);if(c!=null&&PALETTE[c])return PALETTE[c];let h=0;for(const ch of a.name)h=(h*31+ch.charCodeAt(0))>>>0;return PALETTE[h%4]}
-function iconHTML(a,big){const [c1,c2]=colorFor(a);const cl=isClaude(a.url);
-  return `<div class="icon" style="background:linear-gradient(165deg,${c1},${c2})">${esc(emo(a))}${big||cl?"":`<i class="badge wait" data-b="${a.id}"></i>`}</div>`}
+function iconHTML(a,big){const [c1,c2]=colorFor(a);const cl=isClaude(a.url);const e=emo(a);
+  return `<div class="icon${isImg(e)?" img":""}" style="background:linear-gradient(165deg,${c1},${c2})">${isImg(e)?`<img src="${esc(e)}" alt="" draggable="false">`:esc(e)}${big||cl?"":`<i class="badge wait" data-b="${a.id}"></i>`}</div>`}
 function appHTML(a,i){return `<a class="app" href="${esc(a.url)}" target="_blank" rel="noopener" data-id="${a.id}" style="--i:${i}" aria-label="${esc(a.name)}">
   <button class="del" type="button" data-del="${a.id}" aria-label="Delete ${esc(a.name)}">−</button>${iconHTML(a)}<span class="name">${esc(a.name)}</span></a>`}
 
@@ -374,7 +377,7 @@ $("addBtn").onclick=()=>fillForm(null);
 function swatches(){$("swatches").innerHTML=PALETTE.map((c,i)=>`<button type="button" class="sw" style="background:linear-gradient(165deg,${c[0]},${c[1]})" data-sw="${i}" aria-pressed="${pickedColor===i}" aria-label="Colour ${i+1}"></button>`).join("")}
 $("swatches").onclick=e=>{const b=e.target.closest("[data-sw]");if(!b)return;pickedColor=+b.dataset.sw;swatches();preview()};
 function preview(){const tmp={id:editingId||"_",name:$("eName").value||"App",icon:$("eIcon").value};const [c1,c2]=pickedColor!=null?PALETTE[pickedColor]:colorFor(tmp);
-  $("pIcon").style.background=`linear-gradient(165deg,${c1},${c2})`;$("pIcon").textContent=emo(tmp)}
+  $("pIcon").style.background=`linear-gradient(165deg,${c1},${c2})`;const e=emo(tmp);$("pIcon").className="icon"+(isImg(e)?" img":"");$("pIcon").innerHTML=isImg(e)?`<img src="${esc(e)}" alt="">`:esc(e)}
 ["eName","eIcon"].forEach(id=>$(id).addEventListener("input",preview));
 function fillForm(a){editingId=a?a.id:null;$("eTitle").textContent=a?"Edit App":"New App";$("eErr").textContent="";
   $("eName").value=a?.name||"";$("eUrl").value=a?.url||"";$("eDesc").value=a?.description||"";$("eCat").value=a?.category||"";
