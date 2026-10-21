@@ -179,6 +179,19 @@ body.edit .app .icon{animation:jiggle .26s ease-in-out infinite alternate;animat
 .toast{position:fixed;left:50%;top:max(14px,env(safe-area-inset-top,0px));z-index:50;translate:-50% 0;padding:10px 18px;border-radius:999px;font-size:14px;font-weight:600;color:#fff;
   max-width:calc(100vw - 32px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;animation:pop 300ms var(--spring) both}
 
+
+/* bear mascot — sits on the floor bottom-left (on top of the Dock on phones) */
+.bear{position:fixed;z-index:6;pointer-events:none;left:max(6px,env(safe-area-inset-left,0px));bottom:env(safe-area-inset-bottom,0px);
+  width:clamp(130px,13vw,200px);aspect-ratio:792/1017;opacity:0;transition:opacity 500ms var(--ease-out)}
+.bear.on{opacity:1}
+.bear .shadow{position:absolute;left:4%;right:6%;bottom:-1.5%;height:9%;border-radius:50%;
+  background:radial-gradient(closest-side,rgba(0,0,0,.55),rgba(0,0,0,.25) 55%,rgba(0,0,0,0));filter:blur(3px);transform-origin:50% 50%}
+.bear .bodyw{position:absolute;inset:0;transform-origin:50% 98%;will-change:transform}
+.bear img{position:absolute;display:block;width:100%;height:100%;-webkit-user-drag:none;user-select:none;
+  filter:drop-shadow(0 2px 3px rgba(0,0,0,.25))}
+.bear .headw{position:absolute;left:6.004%;top:0.806%;width:92.754%;height:56.774%;transform-origin:51.004% 94.886%;will-change:transform}
+@media (max-width:600px){.bear{width:94px;bottom:calc(env(safe-area-inset-bottom,0px) + 100px)}}
+@media (max-height:520px){.bear{display:none}}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -209,6 +222,14 @@ body.edit .app .icon{animation:jiggle .26s ease-in-out infinite alternate;animat
   <div class="grid" id="grid"></div>
   <div class="empty" id="empty" hidden></div>
 </main>
+
+<div class="bear" id="bear" aria-hidden="true">
+  <div class="shadow" id="bShadow"></div>
+  <div class="bodyw" id="bBody">
+    <img src="bear/bear-body.webp" alt="" width="792" height="1017" decoding="async" draggable="false">
+    <div class="headw" id="bHead"><img src="bear/bear-head.webp" alt="" width="735" height="577" decoding="async" draggable="false"></div>
+  </div>
+</div>
 
 <div class="bottom">
   <label class="spot lg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/></svg>
@@ -396,6 +417,50 @@ let tt;function toast(m){const t=$("toast");t.textContent=m;t.hidden=true;void t
 $("search").addEventListener("input",render);
 document.addEventListener("keydown",e=>{if(e.key==="Escape")["menuWrap","loginBox","editBox","delBox"].forEach(id=>$(id).hidden=true)});
 load();
+
+/* bear: follows the pointer with spring physics; breathes; looks around when idle */
+(function(){
+  const el=$("bear"),body=$("bBody"),head=$("bHead"),shadow=$("bShadow");
+  const imgs=el.querySelectorAll("img");let loaded=0;
+  imgs.forEach(i=>{if(i.complete)loaded++;else i.addEventListener("load",()=>{if(++loaded===imgs.length)el.classList.add("on")})});
+  if(loaded===imgs.length)el.classList.add("on");
+  const still=matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if(still)return;
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  // spring: x' = v ; v' = k(t-x) - c v
+  function spring(k,z){return {x:0,v:0,t:0,k,c:2*Math.sqrt(k)*z}}
+  const S={yaw:spring(70,.72),pitch:spring(70,.75),roll:spring(55,.7),hx:spring(70,.75),hy:spring(70,.75),lean:spring(28,.8),shift:spring(28,.85)};
+  let px=null,py=null,lastMove=-1e9,idleT=0,idleGoal=[0,0],raf=0,prev=performance.now();
+  function setTargets(nx,ny){ // nx,ny in -1..1 relative to the bear's head
+    S.yaw.t=nx*16; S.roll.t=nx*4.2; S.pitch.t=-ny*11; S.hx.t=nx*2.4; S.hy.t=ny*1.6;
+    S.lean.t=nx*2.6; S.shift.t=nx*1.2;
+  }
+  function headCenter(){const r=el.getBoundingClientRect();return [r.left+r.width*.52,r.top+r.height*.30,r.width]}
+  addEventListener("pointermove",e=>{px=e.clientX;py=e.clientY;lastMove=performance.now()},{passive:true});
+  addEventListener("pointerdown",e=>{px=e.clientX;py=e.clientY;lastMove=performance.now()},{passive:true});
+  document.addEventListener("mouseleave",()=>{lastMove=-1e9});
+  function frame(now){
+    const dt=Math.min(.033,(now-prev)/1000);prev=now;
+    const idle=now-lastMove>4500;
+    if(!idle&&px!=null){
+      const [cx,cy,w]=headCenter();
+      const dx=px-cx,dy=py-cy;const reach=Math.max(260,w*3.2);
+      setTargets(clamp(dx/reach,-1,1),clamp(dy/(reach*.8),-1,1));
+    }else{
+      idleT-=dt;
+      if(idleT<=0){idleT=2.2+Math.random()*3;idleGoal=Math.random()<.35?[0,0]:[Math.random()*1.4-.4,Math.random()*1.0-.7]}
+      setTargets(idleGoal[0],idleGoal[1]);
+    }
+    for(const k in S){const s=S[k];const a=s.k*(s.t-s.x)-s.c*s.v;s.v+=a*dt;s.x+=s.v*dt}
+    const br=Math.sin(now/1000*2*Math.PI/3.6); // breathing
+    body.style.transform=`translateX(${S.shift.x}%) rotate(${S.lean.x}deg) scale(${1+br*.004},${1+br*.009})`;
+    head.style.transform=`perspective(900px) translate(${S.hx.x}%,${S.hy.x+br*.5}%) rotateX(${S.pitch.x}deg) rotateY(${S.yaw.x}deg) rotate(${S.roll.x}deg)`;
+    shadow.style.transform=`translateX(${S.shift.x*1.4}%) scaleX(${1+Math.abs(S.lean.x)*.01+br*.01})`;
+    raf=requestAnimationFrame(frame);
+  }
+  document.addEventListener("visibilitychange",()=>{cancelAnimationFrame(raf);if(!document.hidden){prev=performance.now();raf=requestAnimationFrame(frame)}});
+  raf=requestAnimationFrame(frame);
+})();
 </script>
 </body>
 </html>
