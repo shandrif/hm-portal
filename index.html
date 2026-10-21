@@ -85,7 +85,7 @@ body.admin .adminbar{display:flex}
 
   <input class="search" id="search" type="search" placeholder="Search apps…" aria-label="Search apps">
   <main id="list"><div class="msg">Loading apps…</div></main>
-  <footer>Green dot = site is reachable · Red dot = site is not responding</footer>
+  <footer>Green dot = site is reachable · Red dot = site is not responding · Claude links can't be checked</footer>
 </div>
 
 <!-- Login -->
@@ -155,11 +155,12 @@ function render(){
       <span class="host">${esc(host(a.url))}</span>
       <span class="edit"><button class="btn" type="button" data-edit="${a.id}">Edit</button><button class="btn danger" type="button" data-del="${a.id}">Delete</button></span>
     </a>`).join("")}</div></section>`).join("");
-  shown.forEach(a=>{ if(status[a.id]) setDot(a.id,status[a.id]); });
+  shown.forEach(a=>{ if(/(^|\.)claude\.ai$/.test(host(a.url))) check(a); else if(status[a.id]) setDot(a.id,status[a.id]); });
 }
 const status={};
 function setDot(id,s){document.querySelectorAll(`.dot[data-id="${id}"]`).forEach(d=>{d.className="dot "+s;d.lastChild.textContent=s==="up"?"Online":"Offline";});}
 async function check(a){
+  if(/(^|\.)claude\.ai$/.test(host(a.url))){document.querySelectorAll(`.dot[data-id="${a.id}"]`).forEach(d=>{d.className="dot";d.lastChild.textContent="Claude link";});return;}
   const c=new AbortController();const t=setTimeout(()=>c.abort(),8000);
   try{await fetch(a.url,{mode:"no-cors",cache:"no-store",signal:c.signal});status[a.id]="up";}
   catch{status[a.id]="down";}
