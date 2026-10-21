@@ -17,9 +17,13 @@
   --tan:#D4B38B; --teal:#84C6B2; --teal-ink:#84C6B2; color-scheme:dark;
 }}
 *{box-sizing:border-box}
+body::before{content:"";position:fixed;inset:0;z-index:-1;background-color:#8E1B2B;
+  background-image:url("bg.jpg");background-image:image-set(url("bg.webp") type("image/webp"),url("bg.jpg") type("image/jpeg"));
+  background-size:cover;background-position:center;background-repeat:no-repeat}
+.glass{background:color-mix(in srgb,var(--card) 92%,transparent);border:1px solid var(--line);border-radius:16px;padding:14px 18px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
 [hidden]{display:none!important}
 html,body{margin:0}
-body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:15px;line-height:1.5;
+body{background:transparent;color:var(--fg);font-family:var(--font);font-size:15px;line-height:1.5;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
   padding-block:max(20px,env(safe-area-inset-top,0px)) 40px}
 .wrap{max-width:1040px;margin:0 auto;display:flex;flex-direction:column;gap:28px}
@@ -36,10 +40,10 @@ header{display:flex;align-items:center;justify-content:space-between;gap:16px;fl
 .btn.danger:hover{background:var(--down);color:#fff}
 .btn:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
 .search{width:100%;font:inherit;padding:12px 16px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--fg)}
-.cat h2{margin:0 0 12px;font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);display:flex;align-items:center;gap:10px}
-.cat h2::after{content:"";flex:1;height:1px;background:var(--line)}
+.cat h2{margin:0 0 12px;font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:#fff;display:flex;align-items:center;gap:10px;text-shadow:0 1px 3px rgba(0,0,0,.5)}
+.cat h2::after{content:"";flex:1;height:1px;background:rgba(255,255,255,.45)}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
-.tile{position:relative;display:flex;flex-direction:column;gap:10px;padding:18px;border-radius:14px;background:var(--card);border:1px solid var(--line);color:inherit;text-decoration:none;min-width:0;transition:transform .15s,border-color .15s}
+.tile{position:relative;box-shadow:0 6px 18px rgba(0,0,0,.18);display:flex;flex-direction:column;gap:10px;padding:18px;border-radius:14px;background:var(--card);border:1px solid var(--line);color:inherit;text-decoration:none;min-width:0;transition:transform .15s,border-color .15s}
 .tile:hover{transform:translateY(-2px);border-color:var(--tan)}
 .tile .ic{width:44px;height:44px;border-radius:12px;background:var(--tan);display:grid;place-items:center;font-size:22px}
 .tile h3{margin:0;font-size:17px;line-height:1.25}
@@ -50,8 +54,8 @@ header{display:flex;align-items:center;justify-content:space-between;gap:16px;fl
 .dot.up i{background:var(--up)} .dot.down i{background:var(--down)}
 .tile .edit{display:none;gap:8px;margin-top:4px}
 body.admin .tile .edit{display:flex}
-.empty,.msg{padding:28px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:14px}
-footer{color:var(--muted);font-size:12px;text-align:center}
+.empty,.msg{padding:28px;background:var(--card);text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:14px}
+footer{color:#fff;font-size:12px;text-align:center;text-shadow:0 1px 3px rgba(0,0,0,.6)}
 /* dialogs */
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:grid;place-items:center;padding:16px;z-index:20}
 .panel{width:100%;max-width:420px;background:var(--card);border-radius:16px;padding:22px;display:flex;flex-direction:column;gap:12px;border:1px solid var(--line)}
@@ -67,7 +71,7 @@ body.admin .adminbar{display:flex}
 </head>
 <body>
 <div class="wrap">
-  <header>
+  <header class="glass">
     <div class="brand">
       <div class="logo" aria-hidden="true">½M</div>
       <div><h1>HM Portal</h1><p>All Half Million tools in one place</p></div>
