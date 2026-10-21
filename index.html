@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>HM Portal</title>
+<style>
+/* Layout: brand header, search row, tiles grouped by category; admin panel slides in from the right */
+:root{
+  --bg:#F5EDE3; --card:#FFFAF4; --fg:#111111; --muted:#5E544A; --line:#E3D6C4;
+  --tan:#D4B38B; --teal:#84C6B2; --teal-ink:#2F7564; --up:#3BA57E; --down:#C8473B; --wait:#B9AC9B;
+  --font:"Frutiger LT Arabic","Frutiger","Segoe UI",Tahoma,Helvetica,Arial,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#1A1714; --card:#24201C; --fg:#F5EDE3; --muted:#B8AC9E; --line:#3A332C;
+  --tan:#D4B38B; --teal:#84C6B2; --teal-ink:#84C6B2; color-scheme:dark;
+}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:15px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:max(20px,env(safe-area-inset-top,0px)) 40px}
+.wrap{max-width:1040px;margin:0 auto;display:flex;flex-direction:column;gap:28px}
+header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:14px}
+.logo{width:52px;height:52px;border-radius:50%;background:var(--fg);color:var(--bg);display:grid;place-items:center;font-weight:700;font-size:20px;letter-spacing:-.5px}
+.brand h1{margin:0;font-size:24px;line-height:1.1}
+.brand p{margin:2px 0 0;color:var(--muted);font-size:13px}
+.btn{font:inherit;font-size:14px;border:1px solid var(--fg);background:transparent;color:var(--fg);padding:8px 14px;border-radius:999px;cursor:pointer}
+.btn:hover{background:var(--fg);color:var(--bg)}
+.btn.primary{background:var(--fg);color:var(--bg)}
+.btn.primary:hover{background:var(--teal-ink);border-color:var(--teal-ink)}
+.btn.danger{border-color:var(--down);color:var(--down)}
+.btn.danger:hover{background:var(--down);color:#fff}
+.btn:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+.search{width:100%;font:inherit;padding:12px 16px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--fg)}
+.cat h2{margin:0 0 12px;font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);display:flex;align-items:center;gap:10px}
+.cat h2::after{content:"";flex:1;height:1px;background:var(--line)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
+.tile{position:relative;display:flex;flex-direction:column;gap:10px;padding:18px;border-radius:14px;background:var(--card);border:1px solid var(--line);color:inherit;text-decoration:none;min-width:0;transition:transform .15s,border-color .15s}
+.tile:hover{transform:translateY(-2px);border-color:var(--tan)}
+.tile .ic{width:44px;height:44px;border-radius:12px;background:var(--tan);display:grid;place-items:center;font-size:22px}
+.tile h3{margin:0;font-size:17px;line-height:1.25}
+.tile p{margin:0;color:var(--muted);font-size:13px}
+.tile .host{font-size:12px;color:var(--teal-ink);overflow-wrap:anywhere}
+.dot{position:absolute;top:16px;right:16px;display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
+.dot i{width:10px;height:10px;border-radius:50%;background:var(--wait);display:inline-block}
+.dot.up i{background:var(--up)} .dot.down i{background:var(--down)}
+.tile .edit{display:none;gap:8px;margin-top:4px}
+body.admin .tile .edit{display:flex}
+.empty,.msg{padding:28px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:14px}
+footer{color:var(--muted);font-size:12px;text-align:center}
+/* dialogs */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:grid;place-items:center;padding:16px;z-index:20}
+.panel{width:100%;max-width:420px;background:var(--card);border-radius:16px;padding:22px;display:flex;flex-direction:column;gap:12px;border:1px solid var(--line)}
+.panel h3{margin:0;font-size:18px}
+.panel label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
+.panel input,.panel select{font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--fg)}
+.row{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
+.err{color:var(--down);font-size:13px;min-height:1em;margin:0}
+.adminbar{display:none;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:12px 16px;border-radius:12px;background:var(--teal);color:#111}
+body.admin .adminbar{display:flex}
+@media (prefers-reduced-motion:reduce){.tile{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="logo" aria-hidden="true">½M</div>
+      <div><h1>HM Portal</h1><p>All Half Million tools in one place</p></div>
+    </div>
+    <button class="btn" id="adminBtn" type="button">Admin</button>
+  </header>
+
+  <div class="adminbar">
+    <strong>Admin mode</strong>
+    <div class="row">
+      <button class="btn primary" id="addBtn" type="button">Add app</button>
+      <button class="btn" id="logoutBtn" type="button">Exit admin</button>
+    </div>
+  </div>
+
+  <input class="search" id="search" type="search" placeholder="Search apps…" aria-label="Search apps">
+  <main id="list"><div class="msg">Loading apps…</div></main>
+  <footer>Green dot = site is reachable · Red dot = site is not responding</footer>
+</div>
+
+<!-- Login -->
+<div class="overlay" id="loginBox" hidden>
+  <form class="panel" id="loginForm">
+    <h3>Admin sign in</h3>
+    <label>ID<input id="lUser" autocomplete="username" required></label>
+    <label>Password<input id="lPass" type="password" autocomplete="current-password" required></label>
+    <p class="err" id="lErr"></p>
+    <div class="row"><button class="btn" type="button" data-close>Cancel</button><button class="btn primary" type="submit">Sign in</button></div>
+  </form>
+</div>
+
+<!-- Add / edit -->
+<div class="overlay" id="editBox" hidden>
+  <form class="panel" id="editForm">
+    <h3 id="eTitle">Add app</h3>
+    <label>Name<input id="eName" required></label>
+    <label>Link<input id="eUrl" type="url" placeholder="https://…" required></label>
+    <label>Short description<input id="eDesc"></label>
+    <label>Category<input id="eCat" list="cats" placeholder="Operations"></label>
+    <datalist id="cats"><option value="Operations"><option value="Dashboards"><option value="Training"></datalist>
+    <label>Icon (one emoji)<input id="eIcon" maxlength="4" placeholder="🔗"></label>
+    <label>Order<input id="eSort" type="number" value="0"></label>
+    <p class="err" id="eErr"></p>
+    <div class="row"><button class="btn" type="button" data-close>Cancel</button><button class="btn primary" type="submit">Save</button></div>
+  </form>
+</div>
+
+<!-- Delete confirm -->
+<div class="overlay" id="delBox" hidden>
+  <div class="panel">
+    <h3>Delete this app?</h3>
+    <p id="delName" style="margin:0"></p>
+    <p class="err" id="dErr"></p>
+    <div class="row"><button class="btn" type="button" data-close>Cancel</button><button class="btn danger" id="delYes" type="button">Delete</button></div>
+  </div>
+</div>
+
+<script>
+const SB_URL="https://rcufmnidwyycbrtqgqga.supabase.co";
+const SB_KEY="sb_publishable_u2__PPq2nDZLyoNnLHxkVA_olltjpHc";
+const H={apikey:SB_KEY,Authorization:"Bearer "+SB_KEY,"Content-Type":"application/json"};
+let apps=[],cred=null,editingId=null,deletingId=null;
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+async function load(){
+  try{
+    const r=await fetch(SB_URL+"/rest/v1/portal_apps?select=*&order=sort_order.asc,name.asc",{headers:H});
+    if(!r.ok) throw new Error(r.status);
+    apps=await r.json(); render(); checkAll();
+  }catch(e){ $("list").innerHTML='<div class="msg">Could not load the app list. Please refresh in a moment.</div>'; }
+}
+function host(u){try{return new URL(u).hostname.replace(/^www\./,"")}catch{return u}}
+function render(){
+  const q=$("search").value.trim().toLowerCase();
+  const shown=apps.filter(a=>!q||(a.name+" "+a.description+" "+a.category).toLowerCase().includes(q));
+  if(!shown.length){$("list").innerHTML='<div class="empty">'+(apps.length?"No apps match your search.":"No apps yet. Sign in as admin to add the first one.")+'</div>';return;}
+  const groups={};shown.forEach(a=>(groups[a.category||"Other"]??=[]).push(a));
+  $("list").innerHTML=Object.keys(groups).map(c=>`<section class="cat"><h2>${esc(c)}</h2><div class="grid">${groups[c].map(a=>`
+    <a class="tile" href="${esc(a.url)}" target="_blank" rel="noopener">
+      <span class="dot" data-id="${a.id}"><i></i><span>Checking</span></span>
+      <span class="ic">${esc(a.icon||"🔗")}</span>
+      <h3>${esc(a.name)}</h3>
+      ${a.description?`<p>${esc(a.description)}</p>`:""}
+      <span class="host">${esc(host(a.url))}</span>
+      <span class="edit"><button class="btn" type="button" data-edit="${a.id}">Edit</button><button class="btn danger" type="button" data-del="${a.id}">Delete</button></span>
+    </a>`).join("")}</div></section>`).join("");
+  shown.forEach(a=>{ if(status[a.id]) setDot(a.id,status[a.id]); });
+}
+const status={};
+function setDot(id,s){document.querySelectorAll(`.dot[data-id="${id}"]`).forEach(d=>{d.className="dot "+s;d.lastChild.textContent=s==="up"?"Online":"Offline";});}
+async function check(a){
+  const c=new AbortController();const t=setTimeout(()=>c.abort(),8000);
+  try{await fetch(a.url,{mode:"no-cors",cache:"no-store",signal:c.signal});status[a.id]="up";}
+  catch{status[a.id]="down";}
+  clearTimeout(t);setDot(a.id,status[a.id]);
+}
+function checkAll(){apps.forEach(check);}
+setInterval(checkAll,120000);
+
+async function rpc(fn,body){
+  const r=await fetch(SB_URL+"/rest/v1/rpc/"+fn,{method:"POST",headers:H,body:JSON.stringify(body)});
+  const j=await r.json().catch(()=>null);
+  if(!r.ok) throw new Error((j&&j.message)||"Something went wrong");
+  return j;
+}
+function open(id){$(id).hidden=false;} function close(el){el.closest(".overlay").hidden=true;}
+document.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>close(b));
+document.querySelectorAll(".overlay").forEach(o=>o.addEventListener("click",e=>{if(e.target===o)o.hidden=true;}));
+
+$("adminBtn").onclick=()=>{ if(cred){return;} $("lErr").textContent="";open("loginBox");$("lUser").focus(); };
+$("loginForm").onsubmit=async e=>{
+  e.preventDefault();$("lErr").textContent="Checking…";
+  const u=$("lUser").value.trim(),p=$("lPass").value;
+  try{const ok=await rpc("portal_check",{p_user:u,p_pass:p});
+    if(!ok){$("lErr").textContent="Wrong ID or password.";return;}
+    cred={u,p};document.body.classList.add("admin");$("loginBox").hidden=true;$("lPass").value="";$("adminBtn").hidden=true;
+  }catch(err){$("lErr").textContent=err.message;}
+};
+$("logoutBtn").onclick=()=>{cred=null;document.body.classList.remove("admin");$("adminBtn").hidden=false;};
+
+function fillForm(a){
+  editingId=a?a.id:null;$("eTitle").textContent=a?"Edit app":"Add app";$("eErr").textContent="";
+  $("eName").value=a?.name||"";$("eUrl").value=a?.url||"";$("eDesc").value=a?.description||"";
+  $("eCat").value=a?.category||"";$("eIcon").value=a?.icon||"";$("eSort").value=a?.sort_order??(apps.length+1);
+  open("editBox");$("eName").focus();
+}
+$("addBtn").onclick=()=>fillForm(null);
+$("list").addEventListener("click",e=>{
+  const ed=e.target.closest("[data-edit]"),dl=e.target.closest("[data-del]");
+  if(!ed&&!dl) return; e.preventDefault();
+  if(ed) fillForm(apps.find(a=>a.id===ed.dataset.edit));
+  if(dl){deletingId=dl.dataset.del;$("delName").textContent=apps.find(a=>a.id===deletingId)?.name||"";$("dErr").textContent="";open("delBox");}
+});
+$("editForm").onsubmit=async e=>{
+  e.preventDefault();$("eErr").textContent="Saving…";
+  try{await rpc("portal_save_app",{p_user:cred.u,p_pass:cred.p,p_id:editingId,p_name:$("eName").value.trim(),p_url:$("eUrl").value.trim(),
+      p_description:$("eDesc").value.trim(),p_category:$("eCat").value.trim(),p_icon:$("eIcon").value.trim(),p_sort:parseInt($("eSort").value)||0});
+    $("editBox").hidden=true;load();
+  }catch(err){$("eErr").textContent=err.message;}
+};
+$("delYes").onclick=async()=>{
+  $("dErr").textContent="Deleting…";
+  try{await rpc("portal_delete_app",{p_user:cred.u,p_pass:cred.p,p_id:deletingId});$("delBox").hidden=true;load();}
+  catch(err){$("dErr").textContent=err.message;}
+};
+$("search").addEventListener("input",render);
+load();
+</script>
+</body>
+</html>
