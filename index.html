@@ -274,7 +274,7 @@ const PALETTE=[["#E9D3B2","#D4B38B"],["#A9DCCB","#84C6B2"],["#3A3A3A","#111111"]
 let apps=[],cred=null,editingId=null,deletingId=null,status={},pickedColor=null;
 
 const store={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch{return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}};
-function dockIds(){let d=store.get("hmDock",null);if(!d)d=apps.slice(0,4).map(a=>a.id);return d.filter(id=>apps.some(a=>a.id===id)).slice(0,4)}
+function dockIds(){let d=store.get("hmDock",null);if(!d)d=[];return d.filter(id=>apps.some(a=>a.id===id)).slice(0,4)}
 const emo=a=>String(a.icon||"").split("|")[0]||"🔗";const cidx=a=>{const n=parseInt(String(a.icon||"").split("|")[1]);return isNaN(n)?null:n};
 function colorFor(a){const c=cidx(a);if(c!=null&&PALETTE[c])return PALETTE[c];let h=0;for(const ch of a.name)h=(h*31+ch.charCodeAt(0))>>>0;return PALETTE[h%4]}
 function iconHTML(a,big){const [c1,c2]=colorFor(a);const cl=isClaude(a.url);
