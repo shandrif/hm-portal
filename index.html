@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#8E1B2B">
+<meta name="theme-color" content="#2B1A10">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>HM Portal</title>
@@ -27,12 +27,16 @@
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 [hidden]{display:none!important}
 html,body{margin:0;height:100%}
-body{font-family:var(--font);font-size:15px;line-height:1.35;color:#fff;background:#8E1B2B;-webkit-font-smoothing:antialiased;
+body{font-family:var(--font);font-size:15px;line-height:1.35;color:#fff;background:#2B1A10;-webkit-font-smoothing:antialiased;
   -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;overflow-x:hidden}
 input{-webkit-user-select:text;user-select:text}
-body::before{content:"";position:fixed;inset:0;z-index:-2;background-color:#8E1B2B;
-  background-image:url("bg.jpg");background-image:image-set(url("bg.webp") type("image/webp"),url("bg.jpg") type("image/jpeg"));
-  background-size:cover;background-position:center;background-repeat:no-repeat}
+/* live background: the HM bear, drawn frame-by-frame on a canvas; turns to follow the cursor */
+.stage{position:fixed;inset:0;z-index:-2;overflow:hidden;background:#2B1A10;pointer-events:none}
+.stage::before{content:"";position:absolute;inset:-60px;background:#2B1A10 url("frames/poster-960.jpg") center/cover no-repeat;
+  filter:blur(36px) brightness(.85) saturate(1.1)}
+.stage canvas{position:absolute;display:block;opacity:0;transition:opacity 600ms var(--ease-out)}
+.stage canvas.ready{opacity:1}
+.stage canvas.fade{-webkit-mask-image:linear-gradient(180deg,transparent 0,#000 14%,#000 86%,transparent 100%);mask-image:linear-gradient(180deg,transparent 0,#000 14%,#000 86%,transparent 100%)}
 body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
   background:linear-gradient(180deg,rgba(0,0,0,.18) 0%,rgba(0,0,0,0) 30%,rgba(0,0,0,0) 65%,rgba(0,0,0,.28) 100%)}
 
@@ -184,6 +188,7 @@ body.edit .app .icon{animation:jiggle .26s ease-in-out infinite alternate;animat
 </style>
 </head>
 <body>
+<div class="stage" id="stage" aria-hidden="true"><canvas id="stageCanvas"></canvas></div>
 <main class="home">
   <div class="topbar">
     <div class="left">
@@ -398,6 +403,88 @@ $("search").addEventListener("input",render);
 document.addEventListener("keydown",e=>{if(e.key==="Escape")["menuWrap","loginBox","editBox","delBox"].forEach(id=>$(id).hidden=true)});
 load();
 
+/* ---------- live background: bear follows the cursor ----------
+   50 frames from the clip (frames 59–108) sweep the bear's gaze from far left to far right.
+   NOSE = his nose x-position (1280px source) in each frame, measured by tracking the clip. */
+(()=>{
+  const NOSE=[464,466,470,476,485,495,506,517,529,541,553,566,579,592,605,618,631,644,658,672,686,700,714,728,742,756,770,783,796,809,822,836,850,865,880,895,910,924,937,950,973,982,989,994,997,999,1001,1002,1003,1004];
+  const N=NOSE.length,SW=1280,SH=720,CENTRE=648,MIN_VISIBLE=820;   // keep at least 820 source px across so his head stays on screen when he turns
+  const TIERS={1280:{w:1280,h:720,per:12,sheets:5},960:{w:960,h:540,per:16,sheets:4}};
+  const wrap=$("stage"),cv=$("stageCanvas"),ctx=cv.getContext("2d");
+  const coarse=matchMedia("(pointer: coarse)").matches,still=matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const T=TIERS[coarse?960:1280];
+  const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+  function noseToFrame(x){x=clamp(x,NOSE[0],NOSE[N-1]);let lo=0,hi=N-1;while(hi-lo>1){const m=(lo+hi)>>1;if(NOSE[m]<=x)lo=m;else hi=m}return lo+(x-NOSE[lo])/(NOSE[hi]-NOSE[lo])}
+  const IDLE=Math.round(noseToFrame(CENTRE));
+
+  /* poster first (instant), then sprite sheets — the one with the resting pose first */
+  const poster=new Image();poster.src=`frames/poster-${T.w}.jpg`;
+  poster.decode?poster.decode().then(()=>{dirty=true;kick()},()=>{}):poster.onload=()=>{dirty=true;kick()};
+  const sheets=new Array(T.sheets),first=Math.floor(IDLE/T.per);
+  [...Array(T.sheets).keys()].sort((a,b)=>Math.abs(a-first)-Math.abs(b-first)).forEach(i=>{
+    const img=new Image();img.decoding="async";img.src=`frames/sheet-${T.w}-${i}.webp`;
+    const done=()=>{sheets[i]=img;dirty=true;kick()};
+    img.decode?img.decode().then(done,()=>img.complete&&done()):(img.onload=done);
+  });
+  const sheetOf=i=>sheets[Math.floor(i/T.per)];
+
+  /* fit: fill the screen, centred on the bear; on tall phones show enough width that his head never leaves the screen */
+  let box={x:0,y:0,w:0,h:0,s:1};
+  function size(){
+    const vw=innerWidth,vh=innerHeight;let s=Math.max(vw/SW,vh/SH);
+    s=Math.min(s,vw/MIN_VISIBLE);
+    const w=SW*s,h=SH*s,x=(vw-w)/2,y=Math.min((vh-h)/2,Math.max(0,vh*.55-h/2));
+    box={x,y,w,h,s};
+    Object.assign(cv.style,{left:x+"px",top:y+"px",width:w+"px",height:h+"px"});
+    cv.classList.toggle("fade",h<vh-1);
+    const dpr=Math.min(devicePixelRatio||1,2.5),bw=Math.round(Math.min(w*dpr,T.w*1.6));
+    if(cv.width!==bw){cv.width=bw;cv.height=Math.round(bw*9/16);ctx.imageSmoothingQuality="high"}
+    dirty=true;kick();
+  }
+  addEventListener("resize",size);
+
+  let f=IDLE,v=0,target=IDLE,mode="idle",dirty=true,raf=0,prev=0;
+  function blit(i,a){const s=sheetOf(i);ctx.globalAlpha=a;ctx.drawImage(s,(i%T.per)*T.w,0,T.w,T.h,0,0,cv.width,cv.height)}
+  function draw(){
+    let i=Math.floor(f),fr=f-i;
+    if(sheetOf(i)){blit(i,1);if(fr>.002&&i+1<N&&sheetOf(i+1))blit(i+1,fr)}
+    else if(poster.complete&&poster.naturalWidth){ctx.globalAlpha=1;ctx.drawImage(poster,0,0,cv.width,cv.height)}
+    else return;
+    ctx.globalAlpha=1;cv.classList.add("ready");
+  }
+  const SPRING={track:{k:180,z:1},idle:{k:34,z:1}};
+  function step(now){
+    raf=0;const dt=Math.min(.05,(now-(prev||now))/1000);prev=now;
+    const {k,z}=SPRING[mode],c=2*Math.sqrt(k)*z;
+    let t=dt;while(t>0){const h=Math.min(t,1/240);v+=(k*(target-f)-c*v)*h;f+=v*h;t-=h}
+    f=clamp(f,0,N-1);
+    const settled=Math.abs(target-f)<.002&&Math.abs(v)<.01;if(settled){f=target;v=0}
+    draw();dirty=false;
+    if(!settled)kick();else prev=0;
+  }
+  function kick(){if(!raf)raf=requestAnimationFrame(step)}
+
+  /* cursor x across the whole screen → frame: screen edges = full turn, his nose = straight ahead */
+  function aim(cx){
+    const nx=box.x+CENTRE*box.s,vw=innerWidth;
+    let u=cx<nx?(cx-nx)/Math.max(1,nx):(cx-nx)/Math.max(1,vw-nx);
+    u=clamp(u,-1,1);u=Math.sign(u)*Math.pow(Math.abs(u),.85);
+    target=Math.round(noseToFrame(CENTRE+u*(u<0?CENTRE-NOSE[0]:NOSE[N-1]-CENTRE)));mode="track";kick();
+  }
+  let leaveT=0;
+  function rest(){mode="idle";target=IDLE;kick()}
+  if(!still){
+    addEventListener("pointermove",e=>{if(e.pointerType==="mouse"||e.pointerType==="pen"){clearTimeout(leaveT);aim(e.clientX)}},{passive:true});
+    document.documentElement.addEventListener("pointerleave",()=>{clearTimeout(leaveT);leaveT=setTimeout(rest,90)});
+    addEventListener("touchstart",e=>{clearTimeout(leaveT);aim(e.touches[0].clientX)},{passive:true});
+    addEventListener("touchmove",e=>aim(e.touches[0].clientX),{passive:true});
+    addEventListener("touchend",e=>{if(!e.touches.length){clearTimeout(leaveT);leaveT=setTimeout(rest,250)}},{passive:true});
+    addEventListener("touchcancel",rest,{passive:true});
+    addEventListener("blur",rest);
+  }
+  document.addEventListener("visibilitychange",()=>{if(document.hidden){cancelAnimationFrame(raf);raf=0;prev=0}else kick()});
+  size();
+})();
 </script>
 </body>
 </html>
