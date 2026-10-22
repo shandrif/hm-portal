@@ -404,31 +404,40 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape")["menuWrap","loginBo
 load();
 
 /* ---------- live background: bear follows the cursor ----------
-   50 frames from the clip (frames 59–108) sweep the bear's gaze from far left to far right.
-   NOSE = his nose x-position (1280px source) in each frame, measured by tracking the clip. */
+   99 frames: the clip's 50-frame head turn (frames 59–108) plus an optical-flow in-between for every pair.
+   NOSE = his nose x-position (1280px source) per frame, measured by tracking the clip; far left → far right. */
 (()=>{
-  const NOSE=[464,466,470,476,485,495,506,517,529,541,553,566,579,592,605,618,631,644,658,672,686,700,714,728,742,756,770,783,796,809,822,836,850,865,880,895,910,924,937,950,973,982,989,994,997,999,1001,1002,1003,1004];
-  const N=NOSE.length,SW=1280,SH=720,CENTRE=648,MIN_VISIBLE=820;   // keep at least 820 source px across so his head stays on screen when he turns
-  const TIERS={1280:{w:1280,h:720,per:12,sheets:5},960:{w:960,h:540,per:16,sheets:4}};
+  const NOSE=[464,465,466,468,470,473,476,480.5,485,490,495,500.5,506,511.5,517,523,529,535,541,547,553,559.5,566,572.5,579,585.5,592,598.5,605,611.5,618,624.5,631,637.5,644,651,658,665,672,679,686,693,700,707,714,721,728,735,742,749,756,763,770,776.5,783,789.5,796,802.5,809,815.5,822,829,836,843,850,857.5,865,872.5,880,887.5,895,902.5,910,917,924,930.5,937,943.5,950,961.5,973,977.5,982,985.5,989,991.5,994,995.5,997,998,999,1000,1001,1001.5,1002,1002.5,1003,1003.5,1004];
+  const N=NOSE.length,SW=1280,SH=720,CENTRE=648,MIN_VISIBLE=820;
+  const TIERS={1280:{w:1280,h:720,per:12,sheets:9},854:{w:854,h:480,per:17,sheets:6}};
   const wrap=$("stage"),cv=$("stageCanvas"),ctx=cv.getContext("2d");
   const coarse=matchMedia("(pointer: coarse)").matches,still=matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const T=TIERS[coarse?960:1280];
+  const T=TIERS[coarse?854:1280];
   const clamp=(v,a,b)=>v<a?a:v>b?b:v;
   function noseToFrame(x){x=clamp(x,NOSE[0],NOSE[N-1]);let lo=0,hi=N-1;while(hi-lo>1){const m=(lo+hi)>>1;if(NOSE[m]<=x)lo=m;else hi=m}return lo+(x-NOSE[lo])/(NOSE[hi]-NOSE[lo])}
   const IDLE=Math.round(noseToFrame(CENTRE));
 
-  /* poster first (instant), then sprite sheets — the one with the resting pose first */
-  const poster=new Image();poster.src=`frames/poster-${T.w}.jpg`;
+  /* frames are cut out of the sheets into decoded bitmaps once, so scrubbing never waits on image decoding */
+  const frames=new Array(N);
+  const poster=new Image();poster.src=`frames/poster-${T.w===1280?1280:960}.jpg`;
   poster.decode?poster.decode().then(()=>{dirty=true;kick()},()=>{}):poster.onload=()=>{dirty=true;kick()};
-  const sheets=new Array(T.sheets),first=Math.floor(IDLE/T.per);
-  [...Array(T.sheets).keys()].sort((a,b)=>Math.abs(a-first)-Math.abs(b-first)).forEach(i=>{
-    const img=new Image();img.decoding="async";img.src=`frames/sheet-${T.w}-${i}.webp`;
-    const done=()=>{sheets[i]=img;dirty=true;kick()};
+  const first=Math.floor(IDLE/T.per);
+  const canBitmap=typeof createImageBitmap==="function";
+  [...Array(T.sheets).keys()].sort((a,b)=>Math.abs(a-first)-Math.abs(b-first)).forEach(si=>{
+    const img=new Image();img.decoding="async";img.src=`frames/s${T.w}-${si}.webp`;
+    const done=async()=>{
+      const count=Math.min(T.per,N-si*T.per);
+      for(let k=0;k<count;k++){
+        const fi=si*T.per+k;
+        if(canBitmap){try{frames[fi]=await createImageBitmap(img,k*T.w,0,T.w,T.h);continue}catch(e){}}
+        frames[fi]={sheet:img,k};
+      }
+      dirty=true;kick();
+    };
     img.decode?img.decode().then(done,()=>img.complete&&done()):(img.onload=done);
   });
-  const sheetOf=i=>sheets[Math.floor(i/T.per)];
 
-  /* fit: fill the screen, centred on the bear; on tall phones show enough width that his head never leaves the screen */
+  /* fit: fill the screen, centred on the bear; on tall phones keep enough width that his head never leaves the screen */
   let box={x:0,y:0,w:0,h:0,s:1};
   function size(){
     const vw=innerWidth,vh=innerHeight;let s=Math.max(vw/SW,vh/SH);
@@ -443,36 +452,41 @@ load();
   }
   addEventListener("resize",size);
 
-  let f=IDLE,v=0,target=IDLE,mode="idle",dirty=true,raf=0,prev=0;
-  function blit(i,a){const s=sheetOf(i);ctx.globalAlpha=a;ctx.drawImage(s,(i%T.per)*T.w,0,T.w,T.h,0,0,cv.width,cv.height)}
+  let f=IDLE,v=0,target=IDLE,mode="idle",dirty=true,raf=0,prev=0,snapT=0;
+  function blit(i,a){const fr=frames[i];ctx.globalAlpha=a;
+    if(fr.sheet)ctx.drawImage(fr.sheet,fr.k*T.w,0,T.w,T.h,0,0,cv.width,cv.height);else ctx.drawImage(fr,0,0,cv.width,cv.height)}
+  function nearest(i){for(let d=0;d<N;d++){if(i-d>=0&&frames[i-d])return i-d;if(i+d<N&&frames[i+d])return i+d}return -1}
   function draw(){
     let i=Math.floor(f),fr=f-i;
-    if(sheetOf(i)){blit(i,1);if(fr>.002&&i+1<N&&sheetOf(i+1))blit(i+1,fr)}
+    if(frames[i]){blit(i,1);if(fr>.002&&i+1<N&&frames[i+1])blit(i+1,fr)}
+    else if((i=nearest(i))>=0)blit(i,1);
     else if(poster.complete&&poster.naturalWidth){ctx.globalAlpha=1;ctx.drawImage(poster,0,0,cv.width,cv.height)}
     else return;
     ctx.globalAlpha=1;cv.classList.add("ready");
   }
-  const SPRING={track:{k:180,z:1},idle:{k:34,z:1}};
+  /* critically damped springs: smooth follow while tracking, slower glide home */
+  const SPRING={track:{k:110,z:1},settle:{k:60,z:1},idle:{k:28,z:1}};
   function step(now){
     raf=0;const dt=Math.min(.05,(now-(prev||now))/1000);prev=now;
     const {k,z}=SPRING[mode],c=2*Math.sqrt(k)*z;
     let t=dt;while(t>0){const h=Math.min(t,1/240);v+=(k*(target-f)-c*v)*h;f+=v*h;t-=h}
     f=clamp(f,0,N-1);
-    const settled=Math.abs(target-f)<.002&&Math.abs(v)<.01;if(settled){f=target;v=0}
+    const settled=Math.abs(target-f)<.003&&Math.abs(v)<.01;if(settled){f=target;v=0}
     draw();dirty=false;
     if(!settled)kick();else prev=0;
   }
   function kick(){if(!raf)raf=requestAnimationFrame(step)}
 
-  /* cursor x across the whole screen → frame: screen edges = full turn, his nose = straight ahead */
+  /* cursor x across the whole screen → frame (continuous); when the cursor stops he settles onto the nearest whole frame */
   function aim(cx){
     const nx=box.x+CENTRE*box.s,vw=innerWidth;
     let u=cx<nx?(cx-nx)/Math.max(1,nx):(cx-nx)/Math.max(1,vw-nx);
     u=clamp(u,-1,1);u=Math.sign(u)*Math.pow(Math.abs(u),.85);
-    target=Math.round(noseToFrame(CENTRE+u*(u<0?CENTRE-NOSE[0]:NOSE[N-1]-CENTRE)));mode="track";kick();
+    target=noseToFrame(CENTRE+u*(u<0?CENTRE-NOSE[0]:NOSE[N-1]-CENTRE));mode="track";kick();
+    clearTimeout(snapT);snapT=setTimeout(()=>{if(mode==="track"){mode="settle";target=Math.round(target);kick()}},160);
   }
   let leaveT=0;
-  function rest(){mode="idle";target=IDLE;kick()}
+  function rest(){clearTimeout(snapT);mode="idle";target=IDLE;kick()}
   if(!still){
     addEventListener("pointermove",e=>{if(e.pointerType==="mouse"||e.pointerType==="pen"){clearTimeout(leaveT);aim(e.clientX)}},{passive:true});
     document.documentElement.addEventListener("pointerleave",()=>{clearTimeout(leaveT);leaveT=setTimeout(rest,90)});
