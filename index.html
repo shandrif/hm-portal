@@ -166,7 +166,11 @@ body.edit .app .icon{animation:jiggle .26s ease-in-out infinite alternate;animat
 .nav button:last-child{justify-self:end;font-weight:600}
 .nav button:first-child{justify-self:start}
 .preview{display:flex;justify-content:center;padding:12px 0 6px}
-.preview .icon{width:72px;height:72px;font-size:36px}
+.preview .icon{width:72px;height:72px;font-size:36px;cursor:pointer}
+.iconbtns{flex:1;display:flex;justify-content:flex-end;gap:18px}
+.tbtn{font:inherit;font-size:17px;border:0;background:transparent;color:var(--tint);cursor:pointer;padding:11px 0}
+.tbtn.destructive{color:var(--red)}
+.tbtn:disabled{opacity:.5;cursor:default}
 .grp{margin:14px 16px 0;border-radius:10px;background:var(--group);overflow:hidden}
 .field{display:flex;align-items:center;gap:12px;padding:0 16px;min-height:44px;border-bottom:.5px solid var(--sep)}
 .field:last-child{border-bottom:0}
@@ -248,7 +252,9 @@ body.edit .app .icon{animation:jiggle .26s ease-in-out infinite alternate;animat
       <label class="field"><span>About</span><input id="eDesc" placeholder="Short description"></label>
     </div>
     <div class="grp">
-      <label class="field"><span>Icon</span><input id="eIcon" placeholder="Emoji or image link"></label>
+      <div class="field"><span>Photo</span><div class="iconbtns"><button type="button" class="tbtn" id="pickPhoto">Choose Photo</button><button type="button" class="tbtn destructive" id="rmPhoto" hidden>Remove</button></div>
+        <input type="file" id="photoFile" accept="image/*" hidden></div>
+      <label class="field"><span>Emoji</span><input id="eIcon" placeholder="Used when there’s no photo"></label>
       <div class="swatches" id="swatches" role="group" aria-label="Icon colour"></div>
     </div>
     <div class="grp">
@@ -283,7 +289,7 @@ let apps=[],cred=null,editingId=null,deletingId=null,status={},pickedColor=null;
 
 const store={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch{return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}};
 function dockIds(){let d=store.get("hmDock",null);if(!d)d=[];return d.filter(id=>apps.some(a=>a.id===id)).slice(0,4)}
-const isImg=v=>/^(https?:\/\/|icons\/).+\.(svg|png|jpe?g|webp)(\?.*)?$/i.test(v||"");
+const isImg=v=>/^data:image\//i.test(v||"")||/^(https?:\/\/|icons\/).+\.(svg|png|jpe?g|webp)(\?.*)?$/i.test(v||"");
 const emo=a=>String(a.icon||"").split("|")[0]||"🔗";const cidx=a=>{const n=parseInt(String(a.icon||"").split("|")[1]);return isNaN(n)?null:n};
 function colorFor(a){const c=cidx(a);if(c!=null&&PALETTE[c])return PALETTE[c];let h=0;for(const ch of a.name)h=(h*31+ch.charCodeAt(0))>>>0;return PALETTE[h%4]}
 function iconHTML(a,big){const [c1,c2]=colorFor(a);const cl=isClaude(a.url);const e=emo(a);
@@ -382,18 +388,38 @@ $("addBtn").onclick=()=>fillForm(null);
 
 function swatches(){$("swatches").innerHTML=PALETTE.map((c,i)=>`<button type="button" class="sw" style="background:linear-gradient(165deg,${c[0]},${c[1]})" data-sw="${i}" aria-pressed="${pickedColor===i}" aria-label="Colour ${i+1}"></button>`).join("")}
 $("swatches").onclick=e=>{const b=e.target.closest("[data-sw]");if(!b)return;pickedColor=+b.dataset.sw;swatches();preview()};
-function preview(){const tmp={id:editingId||"_",name:$("eName").value||"App",icon:$("eIcon").value};const [c1,c2]=pickedColor!=null?PALETTE[pickedColor]:colorFor(tmp);
+let iconImg=null;
+function preview(){const typed=$("eIcon").value.trim();const tmp={id:editingId||"_",name:$("eName").value||"App",icon:iconImg||typed};
+  const hasImg=!!iconImg||isImg(typed);$("rmPhoto").hidden=!hasImg;$("pickPhoto").textContent=hasImg?"Change Photo":"Choose Photo";const [c1,c2]=pickedColor!=null?PALETTE[pickedColor]:colorFor(tmp);
   $("pIcon").style.background=`linear-gradient(165deg,${c1},${c2})`;const e=emo(tmp);$("pIcon").className="icon"+(isImg(e)?" img":"");$("pIcon").innerHTML=isImg(e)?`<img src="${esc(e)}" alt="">`:esc(e)}
 ["eName","eIcon"].forEach(id=>$(id).addEventListener("input",preview));
 function fillForm(a){editingId=a?a.id:null;$("eTitle").textContent=a?"Edit App":"New App";$("eErr").textContent="";
   $("eName").value=a?.name||"";$("eUrl").value=a?.url||"";$("eDesc").value=a?.description||"";$("eCat").value=a?.category||"";
-  $("eIcon").value=a?emo(a):"";$("eSort").value=a?.sort_order??(apps.length+1);
+  {const cur=a?emo(a):"";iconImg=a&&isImg(cur)?cur:null;$("eIcon").value=iconImg?"":(a?cur:"")}$("eSort").value=a?.sort_order??(apps.length+1);
   pickedColor=a?cidx(a):null;swatches();preview();$("editBox").hidden=false}
 $("editForm").onsubmit=async e=>{e.preventDefault();$("eErr").textContent="Saving…";
   try{const id=await rpc("portal_save_app",{p_user:cred.u,p_pass:cred.p,p_id:editingId,p_name:$("eName").value.trim(),p_url:$("eUrl").value.trim(),
-      p_description:$("eDesc").value.trim(),p_category:$("eCat").value.trim(),p_icon:($("eIcon").value.trim()||"🔗")+(pickedColor!=null?"|"+pickedColor:""),p_sort:parseInt($("eSort").value)||0});
+      p_description:$("eDesc").value.trim(),p_category:$("eCat").value.trim(),p_icon:(iconImg||$("eIcon").value.trim()||"🔗")+(pickedColor!=null?"|"+pickedColor:""),p_sort:parseInt($("eSort").value)||0});
     $("editBox").hidden=true;toast(editingId?"Saved":"App Added");load();
   }catch(err){$("eErr").textContent=err.message}};
+/* icon photo: pick from gallery → square-crop, resize to 256px, store with the app */
+$("pickPhoto").onclick=()=>$("photoFile").click();
+$("pIcon").onclick=()=>$("photoFile").click();
+$("rmPhoto").onclick=()=>{iconImg=null;if(isImg($("eIcon").value.trim()))$("eIcon").value="";preview()};
+$("photoFile").onchange=async e=>{
+  const file=e.target.files[0];e.target.value="";if(!file)return;
+  if(!/^image\//.test(file.type)){$("eErr").textContent="That file isn't an image. Choose a photo.";return}
+  $("eErr").textContent="Preparing photo…";$("pickPhoto").disabled=true;
+  try{
+    const url=URL.createObjectURL(file);const img=new Image();img.src=url;await img.decode();
+    const side=Math.min(img.naturalWidth,img.naturalHeight),S=256,c=document.createElement("canvas");c.width=c.height=S;
+    const g=c.getContext("2d");g.imageSmoothingQuality="high";
+    g.drawImage(img,(img.naturalWidth-side)/2,(img.naturalHeight-side)/2,side,side,0,0,S,S);URL.revokeObjectURL(url);
+    let data=c.toDataURL("image/webp",.86);if(!data.startsWith("data:image/webp"))data=c.toDataURL("image/png");
+    iconImg=data;$("eErr").textContent="";preview();
+  }catch{$("eErr").textContent="Couldn't read that photo. Try a different one."}
+  finally{$("pickPhoto").disabled=false}
+};
 $("delYes").onclick=async()=>{$("dErr").textContent="Deleting…";
   try{await rpc("portal_delete_app",{p_user:cred.u,p_pass:cred.p,p_id:deletingId});$("delBox").hidden=true;toast("Deleted");load()}
   catch(err){$("dErr").textContent=err.message}};
