@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HM Portal</title>
+<style>
+  html,body{margin:0;height:100%;background:#F5EDE3;color:#111;font-family:"Frutiger LT Arabic","Frutiger",-apple-system,"Segoe UI",Arial,sans-serif}
+  .msg{min-height:100%;display:grid;place-items:center;text-align:center;padding:24px;box-sizing:border-box}
+  .msg b{display:block;font-size:18px;margin-bottom:6px}
+  .msg span{color:#6E655B;font-size:14px}
+  .bar{width:120px;height:3px;border-radius:3px;background:#E4D7C5;margin:14px auto 0;overflow:hidden}
+  .bar i{display:block;width:40%;height:100%;background:#D4B38B;animation:s 1s ease-in-out infinite alternate}
+  @keyframes s{to{transform:translateX(150%)}}
+</style>
+</head>
+<body>
+<div class="msg" id="msg"><div><b>Opening…</b><div class="bar"><i></i></div></div></div>
+<script>
+/* Shows an HTML page uploaded through the HM Portal admin, exactly as it was uploaded. */
+(async()=>{
+  const SB_URL="https://rcufmnidwyycbrtqgqga.supabase.co",SB_KEY="sb_publishable_u2__PPq2nDZLyoNnLHxkVA_olltjpHc";
+  const id=new URLSearchParams(location.search).get("p")||"";
+  const fail=(t,s)=>{document.getElementById("msg").innerHTML=`<div><b>${t}</b><span>${s}</span></div>`};
+  if(!/^[0-9a-f-]{36}$/i.test(id))return fail("Page not found","This link is incomplete. Open it again from the HM Portal.");
+  try{
+    const r=await fetch(`${SB_URL}/rest/v1/portal_pages?id=eq.${id}&select=html`,{headers:{apikey:SB_KEY,Authorization:"Bearer "+SB_KEY}});
+    if(!r.ok)throw 0;const rows=await r.json();
+    if(!rows[0])return fail("Page not found","It may have been removed from the HM Portal.");
+    document.open();document.write(rows[0].html);document.close();
+  }catch{fail("Couldn't open this page","Check your connection and try again.")}
+})();
+</script>
+</body>
+</html>

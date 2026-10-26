@@ -170,6 +170,7 @@ body.edit .app .icon{animation:jiggle .26s ease-in-out infinite alternate;animat
 .iconbtns{flex:1;display:flex;justify-content:flex-end;gap:18px}
 .tbtn{font:inherit;font-size:17px;border:0;background:transparent;color:var(--tint);cursor:pointer;padding:11px 0}
 .tbtn.destructive{color:var(--red)}
+.hfile{flex:1;min-width:0;font-size:15px;color:var(--label2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;align-self:center}
 .tbtn:disabled{opacity:.5;cursor:default}
 .grp{margin:14px 16px 0;border-radius:10px;background:var(--group);overflow:hidden}
 .field{display:flex;align-items:center;gap:12px;padding:0 16px;min-height:44px;border-bottom:.5px solid var(--sep)}
@@ -248,7 +249,9 @@ body.edit .app .icon{animation:jiggle .26s ease-in-out infinite alternate;animat
     <div class="preview"><div class="icon" id="pIcon">🔗</div></div>
     <div class="grp">
       <label class="field"><span>Name</span><input id="eName" placeholder="Required" required></label>
-      <label class="field"><span>Link</span><input id="eUrl" type="url" placeholder="https://" required></label>
+      <label class="field"><span>Link</span><input id="eUrl" type="url" placeholder="https://"></label>
+      <div class="field"><span>HTML file</span><div class="iconbtns"><span class="hfile" id="hFile"></span><button type="button" class="tbtn" id="pickHtml">Upload HTML</button><button type="button" class="tbtn destructive" id="rmHtml" hidden>Remove</button></div>
+        <input type="file" id="htmlFile" accept=".html,.htm,text/html" hidden></div>
       <label class="field"><span>About</span><input id="eDesc" placeholder="Short description"></label>
     </div>
     <div class="grp">
@@ -396,9 +399,17 @@ function preview(){const typed=$("eIcon").value.trim();const tmp={id:editingId||
 function fillForm(a){editingId=a?a.id:null;$("eTitle").textContent=a?"Edit App":"New App";$("eErr").textContent="";
   $("eName").value=a?.name||"";$("eUrl").value=a?.url||"";$("eDesc").value=a?.description||"";$("eCat").value=a?.category||"";
   {const cur=a?emo(a):"";iconImg=a&&isImg(cur)?cur:null;$("eIcon").value=iconImg?"":(a?cur:"")}$("eSort").value=a?.sort_order??(apps.length+1);
+  pageId=a?pageIdOf(a.url):null;htmlPending=null;htmlState();
   pickedColor=a?cidx(a):null;swatches();preview();$("editBox").hidden=false}
-$("editForm").onsubmit=async e=>{e.preventDefault();$("eErr").textContent="Saving…";
-  try{const id=await rpc("portal_save_app",{p_user:cred.u,p_pass:cred.p,p_id:editingId,p_name:$("eName").value.trim(),p_url:$("eUrl").value.trim(),
+$("editForm").onsubmit=async e=>{e.preventDefault();
+  let url=$("eUrl").value.trim();
+  if(!htmlPending&&!pageId&&!/^https?:\/\/\S+$/i.test(url)){$("eErr").textContent="Add a link starting with https://, or upload an HTML file.";return}
+  $("eErr").textContent=htmlPending?"Uploading page…":"Saving…";
+  try{
+    if(htmlPending){const pid=await rpc("portal_save_page",{p_user:cred.u,p_pass:cred.p,p_id:pageId,p_name:$("eName").value.trim(),p_file:htmlPending.name,p_html:htmlPending.text});
+      url=pageUrl(pid);$("eErr").textContent="Saving…"}
+    else if(pageId)url=pageUrl(pageId);
+    const id=await rpc("portal_save_app",{p_user:cred.u,p_pass:cred.p,p_id:editingId,p_name:$("eName").value.trim(),p_url:url,
       p_description:$("eDesc").value.trim(),p_category:$("eCat").value.trim(),p_icon:(iconImg||$("eIcon").value.trim()||"🔗")+(pickedColor!=null?"|"+pickedColor:""),p_sort:parseInt($("eSort").value)||0});
     $("editBox").hidden=true;toast(editingId?"Saved":"App Added");load();
   }catch(err){$("eErr").textContent=err.message}};
@@ -420,8 +431,34 @@ $("photoFile").onchange=async e=>{
   }catch{$("eErr").textContent="Couldn't read that photo. Try a different one."}
   finally{$("pickPhoto").disabled=false}
 };
+/* HTML pages: upload a report/page file; the tile opens it exactly as uploaded (view.html) */
+let htmlPending=null,pageId=null;
+const pageUrl=id=>new URL("view.html?p="+id,location.href).href;
+const pageIdOf=u=>{const m=/view\.html\?p=([0-9a-f-]{36})/i.exec(u||"");return m?m[1]:null};
+function htmlState(){
+  const has=!!htmlPending||!!pageId;
+  $("hFile").textContent=htmlPending?htmlPending.name:pageId?"Uploaded page":"";
+  $("pickHtml").textContent=has?"Replace":"Upload HTML";$("rmHtml").hidden=!has;
+  const u=$("eUrl");u.disabled=has;if(has){u.value="";u.placeholder="Opens the uploaded page"}else u.placeholder="https://";
+  if(!has&&!editingId)u.value=u.value||"";
+}
+$("pickHtml").onclick=()=>$("htmlFile").click();
+$("rmHtml").onclick=()=>{htmlPending=null;pageId=null;htmlState()};
+$("htmlFile").onchange=e=>{
+  const f=e.target.files[0];e.target.value="";if(!f)return;
+  if(!/\.html?$/i.test(f.name)&&f.type!=="text/html"){$("eErr").textContent="That isn't an HTML file. Choose a .html file.";return}
+  if(f.size>8*1024*1024){$("eErr").textContent="That file is over 8 MB. Choose a smaller HTML file.";return}
+  const rd=new FileReader();
+  rd.onload=()=>{htmlPending={name:f.name,text:String(rd.result)};$("eErr").textContent="";
+    if(!$("eName").value.trim()){const t=/<title[^>]*>([\s\S]*?)<\/title>/i.exec(htmlPending.text);$("eName").value=(t?t[1].replace(/\s+/g," ").trim().split(/\s[—–|·-]\s/)[0]:f.name.replace(/\.html?$/i,"")).slice(0,40);preview()}
+    htmlState()};
+  rd.onerror=()=>{$("eErr").textContent="Couldn't read that file. Try again."};
+  rd.readAsText(f);
+};
 $("delYes").onclick=async()=>{$("dErr").textContent="Deleting…";
-  try{await rpc("portal_delete_app",{p_user:cred.u,p_pass:cred.p,p_id:deletingId});$("delBox").hidden=true;toast("Deleted");load()}
+  try{const gone=apps.find(a=>a.id===deletingId);await rpc("portal_delete_app",{p_user:cred.u,p_pass:cred.p,p_id:deletingId});
+    const pid=gone&&pageIdOf(gone.url);if(pid){try{await rpc("portal_delete_page",{p_user:cred.u,p_pass:cred.p,p_id:pid})}catch{}}
+    $("delBox").hidden=true;toast("Deleted");load()}
   catch(err){$("dErr").textContent=err.message}};
 
 let tt;function toast(m){const t=$("toast");t.textContent=m;t.hidden=true;void t.offsetWidth;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,1800)}
